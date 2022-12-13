@@ -4,6 +4,26 @@ Status](https://travis-ci.org/hrbrmstr/waffle.svg)](https://travis-ci.org/hrbrms
 [![CRAN\_Status\_Badge](https://www.r-pkg.org/badges/version/waffle)](https://cran.r-project.org/package=waffle)
 ![downloads](https://cranlogs.r-pkg.org/badges/grand-total/waffle)
 
+## URL to the GitHub link to where the original R package came from: 
+
+<https://github.com/hrbrmstr/waffle.git>
+
+## URL to the deployed website used in Part 1E:
+
+<https://jhu-statprogramming-fall-2022.github.io/biostat840-project3-pkgdown-elizwagner>
+
+## Website customizations 
+
+  * bootswatch: lux
+  * bslib: pkgdown-nav-height: 100px
+  * navbar: structure:
+    left:  [intro, reference, articles, tutorials, news]
+    right: [search, github]
+  * home: sidebar:
+    structure: [links, license, community, citation, authors, dev]
+  * bslib:code_font: {google: "JetBrains Mono"}
+
+
 # waffle
 
 Create Waffle Chart Visualizations

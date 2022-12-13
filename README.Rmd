@@ -1,4 +1,8 @@
 ---
+author:
+- Bob Rudis (Author, maintainer)
+- Dave Gandy (Author)
+- Liz Wagner (added vignette_project3, deployed website, and edited README)
 output: rmarkdown::github_document
 ---
 ```{r, include = FALSE}
@@ -8,7 +12,26 @@ knitr::opts_chunk$set(echo = TRUE, collapse = TRUE, message = FALSE, warning = F
 [![CRAN_Status_Badge](https://www.r-pkg.org/badges/version/waffle)](https://cran.r-project.org/package=waffle)
 ![downloads](https://cranlogs.r-pkg.org/badges/grand-total/waffle)
 
-# waffle
+## URL to the GitHub link to where the original R package came from: 
+
+<https://github.com/hrbrmstr/waffle.git>
+
+## URL to the deployed website used in Part 1E:
+
+<https://jhu-statprogramming-fall-2022.github.io/biostat840-project3-pkgdown-elizwagner>
+
+## Website customizations 
+
+  * bootswatch: lux
+  * bslib: pkgdown-nav-height: 100px
+  * navbar: structure:
+    left:  [intro, reference, articles, tutorials, news]
+    right: [search, github]
+  * home: sidebar:
+    structure: [links, license, community, citation, authors, dev]
+  * bslib:code_font: {google: "JetBrains Mono"}
+
+## waffle
 
 Create Waffle Chart Visualizations
 
