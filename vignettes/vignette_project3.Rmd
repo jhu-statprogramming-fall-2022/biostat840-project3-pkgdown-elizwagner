@@ -1,0 +1,524 @@
+---
+title: "Example analysis"
+author: "Liz Wagner"
+date: "r Sys.Date()"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{stats2projvignette}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE, message = FALSE, warning = FALSE, 
+  fig.width = 8, fig.height = 6, out.width = "100%"
+)
+```
+
+## Analysis Question 
+
+I want to know how many missions there were per country and per astronaut. I also want to know the kinds of jobs, gender, and the nationality of most astronauts, their age, and who spent the most time in missions.
+
+If we look at the [TidyTuesday github repo](https://github.com/rfordatascience/tidytuesday/blob/master/data/2020/2020-07-14/) from 2020, we see this dataset contains astronaut information that goes all the way back to the 1930's.
+
+Here is a data dictionary for what all the column names mean: 
+
+- <https://github.com/rfordatascience/tidytuesday/blob/master/data/2020/2020-07-14/readme.md#data-dictionary>
+
+## Loading the data 
+ 
+```{r}
+library(here)
+# tests if a directory named "data" exists locally
+if(!dir.exists(here("data"))) { dir.create(here("data")) }
+
+# saves data only once (not each time you knit a R Markdown)
+if(!file.exists(here("data","astronauts.RDS"))) {
+  url_csv <- 'https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2020/2020-07-14/astronauts.csv'
+  astronauts <- readr::read_csv(url_csv)
+  
+  # save the file to RDS objects
+  saveRDS(astronauts, file= here("data","astronauts.RDS"))
+}
+
+astronauts <- readRDS(here("data","astronauts.RDS"))
+```
+
+## Data Wrangling and Visualization
+
+```{r}
+library(dplyr)
+library(tidyverse)
+library(janitor)
+library(knitr)
+library(stringr)
+library(tidyr)
+library(lubridate)
+library(purrr)
+library(forcats)
+library(waffle)
+library(wesanderson)
+glimpse(astronauts)
+```
+```{r}
+#data wrangling
+#add a current age variable, an age at mission variable, a decade categorical variable 
+
+summary(astronauts$year_of_mission) #look to see spread of mission years 
+
+astronauts <- astronauts %>%
+  mutate(age = (lubridate::year(today()))-year_of_birth,
+         age_at_mission = year_of_mission-year_of_birth, 
+         mission_decade = as.factor (case_when(
+           year_of_mission < 1971 ~ "1960-1970",
+           year_of_mission >= 1971 & year_of_mission < 1981  ~ "1971-1980",
+           year_of_mission>= 1981  & year_of_mission < 1991 ~ "1981-1990",
+           year_of_mission>= 1991  & year_of_mission < 2001 ~ "1991-2000",
+           year_of_mission>= 2001  & year_of_mission < 2011 ~ "2001-2010",
+           year_of_mission>= 2011  & year_of_mission < 2020 ~ "2011-2020",
+           TRUE ~ "Unknown")))
+
+#take out original name variable
+
+astronauts <- astronauts[c(-5)]
+
+#newdata <- subset(mydata, sex=="m" & age > 25,
+#select=weight:income)
+```
+
+It looks like there are multiples of each mission (there are several astronauts per mission) and I want to see how many missions there were per country. I will subset my dataframe by keeping only unique values for the mission_title column. 
+
+```{r}
+new_data <- astronauts %>% 
+  distinct(mission_title, .keep_all = TRUE) 
+```
+
+
+```{r}
+#data visualization
+#Make a histogram of the astronauts to visualize the overall distribution by nationality 
+new_data %>% 
+  ggplot(aes(x = nationality)) +
+  geom_bar() +
+  coord_flip()
+```
+
+Too many countries are represented, making it difficult to read, and spread is really concentrated around US and USSR. What is the actual count of missions per country? What should be the cutoff to include on a bar plot?
+
+```{r}
+new_data %>%
+  count(nationality) %>%
+  filter(n > 1) 
+```
+
+Looks like a good cutoff would be 1. We will visualize the distribution again with countries who have had at least 2 missions. 
+
+```{r}
+new_data %>% 
+  add_count(nationality) %>% 
+  filter(n > 1) %>% 
+  ggplot(aes(x = fct_reorder(nationality, n))) +
+  geom_bar() +
+  coord_flip()
+```
+
+I'd like to know the distribution for astronauts for US and USSR/Russia by gender, since they have the majority of the astronauts. 
+
+```{r}
+astronauts %>%
+  distinct(name, .keep_all = TRUE) %>%
+  filter(nationality == "U.S.S.R/Russia"|nationality == "U.S.") %>%
+  ggplot(aes(year_of_mission, fill = sex)) +
+  geom_bar()+
+  facet_grid(nationality ~ ., scales = "free")
+```
+
+It looks like the US has more women on more missions than the USSR does. Let's also look at the age distribution and see if more astronauts are civilians or military. 
+
+```{r}
+astronauts %>%
+  distinct(name, .keep_all = TRUE) %>%
+  filter(nationality == "U.S."|nationality=='U.S.S.R/Russia') %>%
+  ggplot(aes(age_at_mission, color = military_civilian)) +
+  geom_bar()+
+  facet_grid(nationality ~ ., scales = "free")
+```
+
+Looks like more people are civilians, and age skews a bit older in the US than in Russia for astronauts. 
+
+I'd like to see how the age distribution among astronauts has changed through the decades in the US and in Russia among men and women. 
+
+```{r}
+astronauts %>%
+  distinct(name, .keep_all = TRUE) %>%
+  filter(nationality == "U.S.") %>%
+  ggplot(aes(age_at_mission, fill = sex)) +
+  geom_bar()+
+  facet_wrap(mission_decade ~ ., scales = "free")+ 
+  scale_fill_brewer(palette = "Paired",name = "Gender")
+
+astronauts %>%
+  distinct(name, .keep_all = TRUE) %>%
+  filter(nationality == "U.S.S.R/Russia") %>%
+  ggplot(aes(age_at_mission, fill=sex)) +
+   geom_bar()+
+ facet_wrap(mission_decade ~ ., scales = "free")+ 
+  scale_fill_brewer(palette = "Dark2",name = "Gender")
+```
+
+For the US, it looks like as time has gone on, more and more astronauts are going on missions at an older age. It does look like women tend to be younger as well. For Russia, it looks like the age distribution has remained relatively stable through the decades, hovering mostly around 40 years old. There aren't enough women represented in the graphs to comment on effectively. 
+
+```{r}
+#data wrangling: grouping nationalities so we can look at them more easily 
+astronauts_usethis <- astronauts %>% 
+   mutate(Days = hours_mission/24)%>%
+  mutate(occupation = as.factor(occupation))%>%
+  mutate(Job =  as.factor(fct_collapse(occupation,
+               Pilot = c("Pilot", "pilot"), 
+               Commander = "commander",
+               "Space Tourist" = c("Other (space tourist)", "Space tourist"),
+               "Flight Engineer" = "flight engineer")
+               ))
+
+astronauts_1 <- astronauts_usethis %>% 
+  mutate(nationality = as.factor(nationality)) %>%
+  mutate(nationality_grouped = as.factor(fct_collapse(nationality,
+  Europe = c("France", "Germany", "Romania", "Austria", "Italy", "Switzerland", "Spain", "Bulgaria", "Poland", "Hungry", "Netherland", "Belgium", "Slovakia", "Sweden", "Czechoslovakia", "Denmark", "U.K."),
+  Asia = c("Mongolia", "Japan", "China", "Vietnam", "India", "Malysia", "Korea", "Kazakhstan", "Afghanistan", "Syria", "Saudi Arabia", "Israel", "UAE"), 
+  USA = "U.S.", 
+  "USSR/Russia" = "U.S.S.R/Russia",
+  "USSR/Ukraine" = "U.S.S.R/Ukraine", 
+  "North America" = c("Mexico", "Cuba", "Canada"), 
+  "South America" = "Brazil")))
+```
+
+```{r}
+astro_df <- astronauts_1 %>% 
+   dplyr::filter(nationality_grouped == "USA"|nationality_grouped == "USSR/Russia"| nationality_grouped == "Europe"| nationality_grouped == "Asia")
+```
+
+```{r}
+astro_df <- astro_df%>%
+  rename(c("Time" = "hours_mission",
+         "Gender" = "sex",
+         "Birthyear" = "year_of_birth", 
+         "Name" = "name", 
+         "Nationality"  = "nationality", 
+         "Year" = "year_of_mission", 
+         "Decade" = "mission_decade", 
+         "Age" = "age"))
+
+#purrr - check to see what variables are factored and what are characters
+astro_df %>% select_if(negate(is.double))
+
+nested_astro <- astro_df %>%
+  select_if(negate(is.double))%>%
+  select_if(negate(is.character))%>%
+  group_by(Nationality)%>%
+   nest()
+```
+
+Let's look at time spent in missions now, by country/region. 
+
+```{r}
+astro_df %>%
+  distinct(mission_title, .keep_all = TRUE) %>%
+  filter(nationality_grouped == "USSR/Russia"|nationality_grouped == "Asia"|nationality_grouped=="Europe"|nationality_grouped=="USA") %>%
+  ggplot(aes(Time, fill=nationality_grouped)) +
+  geom_histogram(color="black",bins = 60)+
+  facet_wrap(nationality_grouped ~ ., scales = "free")
+```
+
+These aren't fabulous plots because you can't really see what's going on, they are very spread out. But it does look Russia has spent the most time in missions, even with a lower mission count. 
+
+```{r}
+astro_df_2 <- astro_df  %>% 
+  filter(nationality_grouped=="USA")%>%
+  group_by(Decade,nationality_grouped)%>%
+  summarise(average_hours = mean(Time), 
+            average_days = mean(Days))
+
+astro_df_3 <- astro_df  %>% 
+  filter(nationality_grouped=="USSR/Russia")%>%
+  group_by(Decade,nationality_grouped)%>%
+  summarise(average_hours = mean(Time), 
+            average_days = mean(Days))
+
+astro_df_4<- astro_df  %>% 
+  filter(nationality_grouped=="Asia")%>%
+  group_by(Decade,nationality_grouped)%>%
+  summarise(average_hours = mean(Time), 
+            average_days = mean(Days))
+
+astro_df_5 <- astro_df  %>% 
+  filter(nationality_grouped=="Europe")%>%
+  group_by(Decade,nationality_grouped)%>%
+  summarise(average_hours = mean(Time), 
+            average_days = mean(Days))
+
+astro_df_all<-full_join(full_join(astro_df_2,astro_df_3),full_join(astro_df_5,astro_df_4))
+```
+
+Let's look at days spent on missions per decade for USA and Russia. 
+
+```{r}
+astro_df %>%
+  distinct(mission_title, .keep_all = TRUE) %>%
+  filter(nationality_grouped == "USSR/Russia"|nationality_grouped=="USA") %>%
+  ggplot(aes(Days, fill=nationality_grouped)) +
+  geom_histogram(color="black",bins = 35) +
+  facet_wrap(~ Decade, scales = "free")+ 
+  scale_fill_brewer(palette = "PiYG",name = "Country/Region")
+```
+
+Looks like US has longer missions in later decades, but generally speaking Russia spends more time on missions than the US. 
+
+Now let's look at the amount of days spent on missions across the regions. And again we see that Russia spends longer than the US, and so does Europe. But we can see the US is trending longer, as there are quite a few outliers. We can also look at this through the decades to get a clearer picture. Russia really spent their time on missions in the 80's and 90's. And everyone is trending up in the last decade. 
+
+```{r}
+astro_df %>%
+  distinct(mission_title, .keep_all = TRUE) %>%
+  filter(nationality_grouped == "USSR/Russia"|nationality_grouped=="USA"| nationality_grouped=="Europe"| nationality_grouped=="Asia") %>%
+  ggplot(aes(nationality_grouped,Days, fill=nationality_grouped)) +
+  geom_boxplot() +
+  theme(axis.text.x = element_text(angle = 15,hjust = 1))
+```
+
+### Complete Plot 1
+
+```{r}
+astro_df %>%
+  distinct(mission_title, .keep_all = TRUE) %>%
+  filter(nationality_grouped == "USSR/Russia"|nationality_grouped=="USA"| nationality_grouped=="Europe"| nationality_grouped=="Asia") %>%
+  ggplot(aes(nationality_grouped,Days, fill=nationality_grouped)) +
+  geom_boxplot() +
+  theme(axis.text.x = element_text(angle = 45,hjust = 1))+
+  facet_wrap(~ Decade, scales = "free")+
+  ggtitle("Boxplot of Days of Missions",
+               subtitle = "Region or Country by Decade")+
+  xlab("Country or Region") + ylab("Days")+ labs(caption = "Data source: Tidy Tuesday 2020-07-14, astronauts.csv")+
+  scale_fill_brewer(palette = 4,name = "Country/Region")
+```
+
+```{r}
+dataf <- inner_join(astro_df_all, astro_df)
+dataf <- dataf%>%
+  distinct(mission_title, .keep_all = TRUE)
+```
+
+Now let's look at the average of days spend on missions through the years. It's easier to see here that on average, everyone is spending more time on missions, but Russia has always spent the most. It's interesting too that from 1970-2000, the US and Russia basically had opposite trends. 
+
+### Complete Plot 2
+
+```{r}
+dataf %>%
+ggplot(aes(x=Decade, y=average_days, color=nationality_grouped, group=nationality_grouped)) +
+  geom_line()+
+  geom_point(size=3) + 
+  labs(x="Years", y= "Average Days in Space", title="Average Days in Space by Decade", caption = "Data source: Tidy Tuesday 2020-07-14, astronauts.csv", subtitle = "Per Missions in each Decade by Country/Region", color = "Country/Region")+
+  theme(axis.text.x = element_text(angle = 15))
+```
+
+Now I'd like to look at the astronauts. First, let's look at the age distribution by gender. And then we'll look at individual women astronauts. 
+
+```{r}
+dataf1 <- inner_join(astro_df_all, astro_df)
+
+dataf1 %>% 
+  ggplot(aes(age_at_mission, fill = Gender))+
+  geom_bar()
+```
+It's hard to see anything in this plot so let's try looking at the USA's women astronauts, by military/civilian status. Let's look at their ages. 
+
+```{r}
+dataf1 %>% 
+  subset(mission_number==1 & nationality_grouped == "USA")%>%
+  ggplot(aes(fill = military_civilian, y = fct_reorder(Name,
+                         age_at_mission), x= age_at_mission))+
+  geom_bar(position="dodge", stat="identity")+
+  labs(x="Age at First Mission", y= "Name", title="Age of women who went on their first mission", caption = "Data source: Tidy Tuesday 2020-07-14, astronauts.csv", subtitle = "By name and military status")+ 
+  scale_fill_discrete(name = "Military Status")
+```
+
+We are looking at the age of women on their first mission (and for some, only), broken down by civilian/military status. Way too messy. There's a lot of names! Let's look at only the women who went on more than 4 missions.
+
+### Complete Plot 3
+
+```{r}
+dataf1 %>% 
+  subset(Gender == "female" & total_number_of_missions > 4 & nationality_grouped == "USA")%>%
+  ggplot(aes(fill = military_civilian, y = fct_reorder(Name,
+                         age_at_mission), x= age_at_mission))+
+  geom_bar(position="dodge", stat="identity")+
+  labs(x="Age at First Mission", y= "Name", title="Age of women at their first mission", caption = "Data source: Tidy Tuesday 2020-07-14, astronauts.csv", subtitle = "By name and military status, from women who went on more than 4 missions")+ 
+  scale_fill_brewer(palette = "Set1",name = "Military Status")+ 
+  theme(axis.text.y = element_text(angle = 25))
+```
+
+Most women from the US are in their thirties or forties on their first mission if they go on more than 4. Also, most of then are civilians. I wonder how that changes when we look at men and women in the US. 
+
+### Complete Plot 4
+
+```{r}
+dataf1 %>% 
+  subset(mission_number==1 & total_number_of_missions > 4 & nationality_grouped == "USA")%>%
+  ggplot(aes(fill = Gender, y = fct_reorder(Name,
+                         age_at_mission), x= age_at_mission))+
+  geom_bar(position="dodge", stat="identity")+
+  labs(x="Age in Years at First Mission", y= "Name", title="Ages of people at their first mission", caption = "Data source: Tidy Tuesday 2020-07-14, astronauts.csv", subtitle = "By name and gender, from people who went on more than 4 missions")+ 
+  scale_fill_brewer(palette = "Set2",name = "Gender")+ 
+  theme(axis.text.y = element_text(angle = 25))
+```
+
+In this plot we can see that women and men that go on more than 4 missions are similarly distributed (around 30's to 40's) on their first mission. Way more men than women. Not many people go on more than 4 missions. When I took it up to more than 5, there were no women. More men are repeating than women, but then, there are more men than women in general.
+
+## Using Waffle!
+
+```{r}
+library(waffle)
+library(hrbrthemes)
+```
+
+Here are some fun visuals on the distributions using waffle plots, from the package, waffle!
+
+```{r}
+astro_summarized <-
+  astro_df %>%
+  distinct(Name, .keep_all = TRUE)%>%
+  group_by(nationality_grouped, Gender) %>%
+  summarize(Count = n())
+
+w1 <- filter(astro_summarized, nationality_grouped == "USA") %>%
+  ggplot(aes(fill = Gender, values = Count)) +
+  geom_waffle() +
+  labs(fill = "Gender", title="Waffle Plot USA Astronauts by Gender")+ 
+  scale_fill_brewer(palette = "Dark2")+
+  theme_void()
+
+w2 <- filter(astro_summarized, nationality_grouped == "USSR/Russia") %>%
+  ggplot(aes(fill = Gender, values = Count)) +
+  geom_waffle() +
+  labs(fill = "Gender", title="Waffle Plot USSR/Russia Astronauts by Gender")+ 
+  scale_fill_brewer(palette = "Set1")+
+  theme_void()
+iron(w1,w2)
+```
+
+### Complete Plot 5
+
+
+***Note there are no x or y axes on these plots be design.*** 
+
+
+
+```{r}
+astro_summarized %>%
+  ggplot(aes(fill = Gender, values = Count)) +
+  geom_waffle() +
+  labs(fill = "Gender", title="Waffle Plot USSR/Russia Astronauts by Gender", caption = "Data source: Tidy Tuesday 2020-07-14, astronauts.csv", subtitle = "Faceted by Country/Region")+ 
+  facet_wrap(~ nationality_grouped, scales = "free")+
+  theme_void()+ 
+  scale_fill_brewer(palette = "Accent")
+```
+
+### Complete Plot 6 
+
+
+```{r}
+dataf_waffle <- dataf %>%
+  subset(nationality_grouped == "USA")
+spec <- table(dataf_waffle$Decade)
+waffle(spec)+
+  labs(title="Waffle Summary Plot USA Missions", caption = "Data source: Tidy Tuesday 2020-07-14, astronauts.csv", subtitle = "By decade")
+
+
+waffle(spec / 10, rows = 5, xlab = "1 square = 10 Missions")+
+  labs(title="Waffle Summary Plot USA Missions", caption = "Data source: Tidy Tuesday 2020-07-14, astronauts.csv", subtitle = "By decade, divided by 10")
+```
+
+### Complete Plot 7
+
+```{r}
+waffle_plot <- astro_df_all %>%
+  ggplot(aes(fill = nationality_grouped, values = average_days)) +
+  expand_limits(x=c(0,0), y=c(0,0)) +
+  coord_equal() +
+  labs(fill = NULL, colour = NULL) 
+
+
+waffle_plot +
+  geom_waffle(
+    n_rows = 10, size = 1, colour = "white", 
+    make_proportional = TRUE
+  )+theme_void()+
+  labs(title="Waffle Summary Plot of Average Days of Missions", caption = "Data source: Tidy Tuesday 2020-07-14, astronauts.csv", subtitle = "By Country/Region")+ 
+  scale_fill_brewer(palette = "Set2",name = "Country/Region")
+   
+```
+
+### Complete Plot 8 
+
+
+```{r}
+
+astronauts %>%
+  count(nationality) %>%
+  ggplot(aes(fill = nationality, values = n)) +
+  expand_limits(x=c(0,0), y=c(0,0)) +
+  coord_equal() +
+  labs(fill = NULL, colour = NULL) -> waf
+
+waf +
+  geom_waffle(
+    n_rows = 10, size = 3, colour = "white", 
+    make_proportional = TRUE
+  )
+```
+
+## Summary of Results 
+
+USA and Russia have had the most missions, and have had the most astronauts on missions. Men are more frequently on missions than women. Most women are citizens instead of military. Although USA has more missions than Russia, Russia has longer missions (as seen in the data by days and hours). Most astronauts only go on one mission, but men have gone on as many as 6. As time has gone on, missions and time of missions is trending upwards, we are seeing more women astronauts, and the age of astronauts is increasing. 
+
+## List of functions used:
+
+#### Six from: `dplyr`, `tidyr`, `lubridate`, `stringr`, or `forcats` 
+
+  * filter()
+  * subset()
+  * distinct()
+  * group_by()
+  * lubridate()
+  * mutate()
+  * case_when()
+  * rename()
+  * summarise()
+  * add_count()
+  * etc... 
+  
+#### Two from: `purrr`
+
+  * select_if()
+  * nest()
+
+#### Three from: `ggplot2`
+
+  * scale_fill_brewer()
+  * labs()
+  * theme_void()
+  * geom_line()
+  * geom_point()
+  * geom_boxplot()
+  * inner_join()
+  * full_join)()
+  * etc... 
+  
+#### One plots uses: `facet_grid()` or `facet_wrap()`
+   
+    - Plots should have titles, subtitles, captions, and human-understandable axis labels. 
+
+#### Two from: `waffle` 
+
+  * waffle()
+  * iron()
+
